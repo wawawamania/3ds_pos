@@ -24,7 +24,6 @@ static Result init_network(void) {
         return rc;
     }
 
-    // HTTP GETだけなら sharedmem_size は 0 でOK
     rc = httpcInit(0);
     if (R_FAILED(rc)) {
         socExit();
@@ -46,63 +45,58 @@ static void exit_network(void) {
     }
 }
 
-static Result fetch_status(char *out, size_t outSize) {
+static Result post_order(char *out, size_t outSize) {
     Result rc;
     httpcContext context;
     u32 statuscode = 0;
-    u32 contentsize = 0;
     u32 downloaded = 0;
 
-    // ここを自分のMacのローカルIPにする
-    const char *url = "http://192.168.11.63:8000/status";
+    const char *url = "http://192.168.11.63:8000/orders";
+    const char *jsonBody = "{\"productId\":1,\"productName\":\"コーラ\",\"qty\":1}";
 
     memset(&context, 0, sizeof(context));
     memset(out, 0, outSize);
 
-    rc = httpcOpenContext(&context, HTTPC_METHOD_GET, url, 1);
+    rc = httpcOpenContext(&context, HTTPC_METHOD_POST, url, 1);
     if (R_FAILED(rc)) return rc;
 
+    rc = httpcAddRequestHeaderField(&context, "Connection", "close");
+    if (R_FAILED(rc)) goto cleanup;
+
+    rc = httpcAddRequestHeaderField(&context, "User-Agent", "3DS POS Client");
+    if (R_FAILED(rc)) goto cleanup;
+
+    rc = httpcAddRequestHeaderField(&context, "Content-Type", "application/json");
+    if (R_FAILED(rc)) goto cleanup;
+
+    rc = httpcSetRequestBodyCopy(&context, (u8*)jsonBody, strlen(jsonBody));
+    if (R_FAILED(rc)) goto cleanup;
+
     rc = httpcBeginRequest(&context);
-    if (R_FAILED(rc)) {
-        httpcCloseContext(&context);
-        return rc;
-    }
+    if (R_FAILED(rc)) goto cleanup;
 
     rc = httpcGetResponseStatusCode(&context, &statuscode);
-    if (R_FAILED(rc)) {
-        httpcCloseContext(&context);
-        return rc;
-    }
+    if (R_FAILED(rc)) goto cleanup;
 
     if (statuscode != 200) {
         snprintf(out, outSize, "HTTP %lu", (unsigned long)statuscode);
-        httpcCloseContext(&context);
-        return 0;
+        rc = 0;
+        goto cleanup;
     }
 
-    rc = httpcGetDownloadSizeState(&context, NULL, &contentsize);
-    if (R_FAILED(rc)) {
-        httpcCloseContext(&context);
-        return rc;
-    }
-
-    if (contentsize >= outSize) {
-        contentsize = (u32)outSize - 1;
-    }
-
-    rc = httpcDownloadData(&context, (u8*)out, contentsize, &downloaded);
-    if (rc == (s32)HTTPC_RESULTCODE_DOWNLOADPENDING) {
+    rc = httpcDownloadData(&context, (u8*)out, outSize - 1, &downloaded);
+    if (rc == HTTPC_RESULTCODE_DOWNLOADPENDING) {
         rc = 0;
     }
 
-    if (R_FAILED(rc)) {
-        httpcCloseContext(&context);
-        return rc;
-    }
+    if (R_FAILED(rc)) goto cleanup;
 
     out[downloaded] = '\0';
+    rc = 0;
+
+cleanup:
     httpcCloseContext(&context);
-    return 0;
+    return rc;
 }
 
 int main(int argc, char **argv)
@@ -111,7 +105,7 @@ int main(int argc, char **argv)
     consoleInit(GFX_TOP, NULL);
 
     printf("3DS POS Client\n");
-    printf("A: connect /status\n");
+    printf("A: POST /orders\n");
     printf("START: exit\n\n");
 
     Result rc = init_network();
@@ -132,10 +126,10 @@ int main(int argc, char **argv)
 
         if (kDown & KEY_A)
         {
-            printf("\x1b[8;1Hconnecting...                    \n");
+            printf("\x1b[8;1Hposting order...                  \n");
             memset(response, 0, sizeof(response));
 
-            rc = fetch_status(response, sizeof(response));
+            rc = post_order(response, sizeof(response));
             if (R_FAILED(rc)) {
                 printf("\x1b[9;1Hrequest failed: 0x%08lX          \n", (unsigned long)rc);
             } else {
