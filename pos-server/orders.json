@@ -1,1 +1,30 @@
-[]
+[
+  {
+    "id": 1,
+    "productId": 1,
+    "productName": "cola",
+    "qty": 1,
+    "orderedAt": "2026-04-18T14:04:42.285Z"
+  },
+  {
+    "id": 2,
+    "productId": 1,
+    "productName": "cola",
+    "qty": 1,
+    "orderedAt": "2026-04-18T14:19:13.236Z"
+  },
+  {
+    "id": 3,
+    "productId": 1,
+    "productName": "cola",
+    "qty": 1,
+    "orderedAt": "2026-04-18T14:26:51.167Z"
+  },
+  {
+    "id": 4,
+    "productId": 1,
+    "productName": "cola",
+    "qty": 1,
+    "orderedAt": "2026-04-18T14:27:21.404Z"
+  }
+]
