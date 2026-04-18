@@ -14,9 +14,7 @@ static Result init_network(void) {
     Result rc;
 
     socBuffer = (u32*)memalign(SOC_ALIGN, SOC_BUFFERSIZE);
-    if (!socBuffer) {
-        return -1;
-    }
+    if (!socBuffer) return -1;
 
     rc = socInit(socBuffer, SOC_BUFFERSIZE);
     if (R_FAILED(rc)) {
@@ -25,7 +23,6 @@ static Result init_network(void) {
         return rc;
     }
 
-    // POSTで本文を送るので shared memory を確保する
     rc = httpcInit(HTTPC_SHAREDMEM);
     if (R_FAILED(rc)) {
         socExit();
@@ -51,11 +48,8 @@ static Result post_order(char *out, size_t outSize) {
     Result rc;
     httpcContext context;
     u32 statuscode = 0;
-    u32 downloaded = 0;
 
-    const char *url = "http://192.168.11.63:8000/orders";
-    static const char jsonBody[] =
-        "{\"productId\":1,\"productName\":\"cola\",\"qty\":1}";
+    const char *url = "http://192.168.11.46:8000/orders?productId=1&productName=cola&qty=1";
 
     memset(&context, 0, sizeof(context));
     memset(out, 0, outSize);
@@ -63,21 +57,9 @@ static Result post_order(char *out, size_t outSize) {
     rc = httpcOpenContext(&context, HTTPC_METHOD_POST, url, 1);
     if (R_FAILED(rc)) return rc;
 
-    rc = httpcAddRequestHeaderField(&context, "Connection", "close");
-    if (R_FAILED(rc)) goto cleanup;
-
-    rc = httpcAddRequestHeaderField(&context, "User-Agent", "3DS POS Client");
-    if (R_FAILED(rc)) goto cleanup;
-
-    rc = httpcAddRequestHeaderField(&context, "Content-Type", "application/json");
-    if (R_FAILED(rc)) goto cleanup;
-
-    rc = httpcSetKeepAlive(&context, HTTPC_KEEPALIVE_DISABLED);
-    if (R_FAILED(rc)) goto cleanup;
-
-    // 今の libctru では生のPOST本文はこれで入れる
-    rc = httpcAddPostDataRaw(&context, (const u32*)jsonBody, (u32)strlen(jsonBody));
-    if (R_FAILED(rc)) goto cleanup;
+    httpcSetKeepAlive(&context, HTTPC_KEEPALIVE_DISABLED);
+    httpcAddRequestHeaderField(&context, "Connection", "close");
+    httpcAddRequestHeaderField(&context, "User-Agent", "3DS POS Client");
 
     rc = httpcBeginRequest(&context);
     if (R_FAILED(rc)) goto cleanup;
@@ -85,20 +67,7 @@ static Result post_order(char *out, size_t outSize) {
     rc = httpcGetResponseStatusCode(&context, &statuscode);
     if (R_FAILED(rc)) goto cleanup;
 
-    if (statuscode != 200) {
-        snprintf(out, outSize, "HTTP %lu", (unsigned long)statuscode);
-        rc = 0;
-        goto cleanup;
-    }
-
-    rc = httpcDownloadData(&context, (u8*)out, (u32)outSize - 1, &downloaded);
-    if (rc == HTTPC_RESULTCODE_DOWNLOADPENDING) {
-        rc = 0;
-    }
-
-    if (R_FAILED(rc)) goto cleanup;
-
-    out[downloaded] = '\0';
+    snprintf(out, outSize, "HTTP %lu", (unsigned long)statuscode);
     rc = 0;
 
 cleanup:
@@ -111,8 +80,11 @@ int main(int argc, char **argv)
     gfxInitDefault();
     consoleInit(GFX_TOP, NULL);
 
-    printf("3DS POS Client\n");
-    printf("A: POST /orders\n");
+    printf("3DS POS Client v2\n");
+    printf("POST target:\n");
+    printf("192.168.11.46:8000/orders\n\n");
+
+    printf("A: POST order\n");
     printf("START: exit\n\n");
 
     Result rc = init_network();
@@ -122,7 +94,7 @@ int main(int argc, char **argv)
         printf("network init ok\n");
     }
 
-    char response[1024];
+    char response[256];
 
     while (aptMainLoop())
     {
@@ -133,15 +105,14 @@ int main(int argc, char **argv)
 
         if (kDown & KEY_A)
         {
-            printf("\x1b[8;1Hposting order...                  \n");
-            memset(response, 0, sizeof(response));
+            printf("\x1b[10;1Hposting order...            \n");
 
             rc = post_order(response, sizeof(response));
+
             if (R_FAILED(rc)) {
-                printf("\x1b[9;1Hrequest failed: 0x%08lX          \n", (unsigned long)rc);
+                printf("\x1b[11;1Hrequest failed: 0x%08lX      \n", (unsigned long)rc);
             } else {
-                printf("\x1b[9;1Hresponse:                        \n");
-                printf("\x1b[10;1H%s                              \n", response);
+                printf("\x1b[11;1Hresponse: %s                \n", response);
             }
         }
 
