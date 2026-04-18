@@ -6,6 +6,7 @@
 
 #define SOC_ALIGN       0x1000
 #define SOC_BUFFERSIZE  0x100000
+#define HTTPC_SHAREDMEM 0x1000
 
 static u32 *socBuffer = NULL;
 
@@ -24,7 +25,8 @@ static Result init_network(void) {
         return rc;
     }
 
-    rc = httpcInit(0);
+    // POSTで本文を送るので shared memory を確保する
+    rc = httpcInit(HTTPC_SHAREDMEM);
     if (R_FAILED(rc)) {
         socExit();
         free(socBuffer);
@@ -52,7 +54,8 @@ static Result post_order(char *out, size_t outSize) {
     u32 downloaded = 0;
 
     const char *url = "http://192.168.11.63:8000/orders";
-    const char *jsonBody = "{\"productId\":1,\"productName\":\"コーラ\",\"qty\":1}";
+    static const char jsonBody[] =
+        "{\"productId\":1,\"productName\":\"cola\",\"qty\":1}";
 
     memset(&context, 0, sizeof(context));
     memset(out, 0, outSize);
@@ -69,7 +72,11 @@ static Result post_order(char *out, size_t outSize) {
     rc = httpcAddRequestHeaderField(&context, "Content-Type", "application/json");
     if (R_FAILED(rc)) goto cleanup;
 
-    rc = httpcSetRequestBodyCopy(&context, (u8*)jsonBody, strlen(jsonBody));
+    rc = httpcSetKeepAlive(&context, HTTPC_KEEPALIVE_DISABLED);
+    if (R_FAILED(rc)) goto cleanup;
+
+    // 今の libctru では生のPOST本文はこれで入れる
+    rc = httpcAddPostDataRaw(&context, (const u32*)jsonBody, (u32)strlen(jsonBody));
     if (R_FAILED(rc)) goto cleanup;
 
     rc = httpcBeginRequest(&context);
@@ -84,7 +91,7 @@ static Result post_order(char *out, size_t outSize) {
         goto cleanup;
     }
 
-    rc = httpcDownloadData(&context, (u8*)out, outSize - 1, &downloaded);
+    rc = httpcDownloadData(&context, (u8*)out, (u32)outSize - 1, &downloaded);
     if (rc == HTTPC_RESULTCODE_DOWNLOADPENDING) {
         rc = 0;
     }
