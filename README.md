@@ -2,4 +2,4 @@
 
 `pos-server/server.js`と`pos3ds/source/main.c`に書いてあるIPアドレスを自分のローカルIPに変更してね
 
-`pos3ds.3dsx`をFBIで保存して
+`pos3ds/source/QR_658681.png`をFBIでダウンロードしてね
